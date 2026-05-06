@@ -1,187 +1,106 @@
-# Virtual Physics Lab v2 — "Chaos Edition"
+# Computer Vision Projects
 
-A real-time, gesture-controlled physics sandbox built with **MediaPipe**, **Pymunk**, and **OpenCV**.  
-Control the simulation entirely with your hands — no mouse, no keyboard, no controllers.
-
-> **Live demo GIF** — record one with `python record_demo.py` (see below) and drop it here.
+Real-time hand and face tracking experiments built with MediaPipe, OpenCV, and Python.  
+No mouse. No keyboard. Just your hands and a webcam.
 
 ---
 
-## Features
+## Projects
+
+### 1 · Welcome Buddy — Biometric HUD (`camera_tracking_v2.py`)
+
+A dual-person surveillance-style HUD with a cyberpunk aesthetic. Tracks two people simultaneously — face bounding boxes, live emotion detection, and a glowing hand skeleton with adaptive motion prediction.
+
+**Features**
+- **2-person tracking** — faces sorted left-to-right, each matched to a registered user profile
+- **Emotion detection** — blendshape-based classifier; live mood label per person (Happy · Sad · Angry · Surprised · Neutral)
+- **HandVisualizer** — glowing skeleton with ghosting trails and 4 prediction profiles:
+  - `Precise` — tight, low-latency tracking
+  - `Balanced` *(default)* — smooth blend of history and prediction
+  - `Futuristic` — long ghost trail, high prediction arc
+  - `Aggressive` — maximum prediction distance, fast response
+- **Adaptive motion prediction** — linear regression (`np.linalg.lstsq`) on index-tip history; prediction distance and history window scale with hand speed
+- **Dynamic info panels** — per-face panels auto-flip to the roomier side; straight connector line with 130 px gap
+- **CLI typewriter boot animation** — form fields build character-by-character on launch
+- **Post-processing** — vignette, scanlines, greyscale / colour / thermal filters
+
+**Keys**
+
+| Key | Action |
+|-----|--------|
+| `P` | Cycle hand profile (Precise → Balanced → Futuristic → Aggressive) |
+| `F` | Cycle background filter |
+| `1` | Toggle face bounding box |
+| `2` | Toggle hand skeleton |
+| `3` | Toggle info panels |
+| `4` | Toggle scanlines |
+| `✌` gesture | Toggle face blur |
+| `Q` | Quit |
+
+**Tech stack**
+
+| Library | Role |
+|---------|------|
+| MediaPipe 0.10 (Tasks API) | `FaceLandmarker` + `HandLandmarker` in `LIVE_STREAM` mode; blendshapes for emotion |
+| OpenCV | Camera capture, frame rendering, HUD overlays, filters |
+| NumPy | Linear regression, EMA smoothing, vignette/scanline masks |
+| Pillow | TrueType font rendering (crisp HUD text at any resolution) |
+
+```bash
+python3.11 camera_tracking_v2.py
+```
+
+---
+
+### 2 · Virtual Physics Lab v2 — "Chaos Edition" (`virtual_physics_lab_v2.py`)
+
+A real-time gesture-controlled physics sandbox. Spawn rigid bodies, flip gravity, and throw objects — entirely with hand gestures.
+
+**Gestures**
 
 | Gesture | Effect |
 |---------|--------|
-| **Pinch** (thumb + index) | Spawn a random polygon — triangle, pentagon, hexagon, or box |
-| **Fist** (all fingers closed) | Flip gravity direction (up ↔ down) |
-| **Open palm thrust** | Shockwave blast — radial impulse on everything nearby |
-| **Fast finger flick** | Velocity kick — physically launch objects you swipe through |
+| Pinch (thumb + index) | Spawn a random polygon |
+| Fist | Flip gravity direction |
+| Open palm thrust | Shockwave — radial impulse on nearby objects |
+| Fast finger flick | Velocity kick — physically launch objects you swipe through |
 
-- Two hands tracked simultaneously and independently
-- Particle explosion system — burst on every spawn and flick impact
-- Up to 45 live rigid bodies; oldest are culled automatically
-- Kinematic finger bodies collide physically with dynamic objects
-- Gravity toggle with full particle feedback burst
+**Tech stack**
 
----
-
-## How It Works
-
-### 1. Hand Tracking — MediaPipe
-
-MediaPipe's `Hands` model detects 21 **3D landmarks** per hand from a single RGB frame.  
-Key landmarks used:
-
-```
-Thumb tip   → landmark 4
-Index tip   → landmark 8
-Middle tip  → landmark 12
-Wrist root  → landmark 0
-PIP joints  → landmarks 6, 10, 14, 18  (used for extended-finger test)
-```
-
-Each landmark is a normalised `(x, y, z)` coordinate.  
-We multiply `x` and `y` by frame width/height to get pixel positions.
-
-### 2. Gesture Classification
-
-All gesture detection is purely geometric — no ML classifier beyond MediaPipe itself.
-
-| Gesture | Rule |
+| Library | Role |
 |---------|------|
-| **Extended finger** | `tip.y < pip.y` (tip is above middle knuckle in screen coords) |
-| **Fist** | 0 non-thumb fingers extended |
-| **Open palm** | ≥ 4 non-thumb fingers extended |
-| **Pinch** | Euclidean distance(thumb tip, index tip) < 50 px |
-| **Flick** | Finger positional delta × FPS > 350 px/s |
+| MediaPipe | Real-time hand landmark detection (21 landmarks per hand) |
+| Pymunk | 2D rigid-body physics (Chipmunk 2D wrapper) |
+| OpenCV | Camera capture and frame rendering |
+| NumPy | Frame buffer manipulation |
 
-Rising-edge detection prevents accidental repeated triggers:  
-a fist only flips gravity **once per close**, and a pinch only spawns **once per squeeze**.
-
-### 3. Physics — Pymunk (Chipmunk 2D wrapper)
-
-- **Dynamic bodies** — shapes affected by gravity, collisions, and impulses
-- **Kinematic bodies** — finger-tip circles driven by hand position, not forces.  
-  Setting `velocity = Δpos / dt` each frame lets Pymunk resolve collision impulses correctly
-- **Static segments** — boundary walls rebuilt once at first frame when resolution is known
-- **Paddle** — a live `Segment` between thumb–index and index–middle creates a "hand bat"
-
-Physics impulse for a velocity flick:
+```bash
+python3.11 virtual_physics_lab_v2.py
 ```
-magnitude = (1 - dist/radius) × finger_speed × 0.09 × object_mass
-direction = normalised velocity vector
-body.apply_impulse_at_world_point(direction × magnitude, body.position)
-```
-
-Shockwave uses a radial version of the same formula with `direction = (Δx/dist, Δy/dist)`.
-
-### 4. Particle System
-
-Particles are pure Python structs (using `__slots__` for speed).  
-Each tick:
-- Position updated by velocity
-- Horizontal velocity multiplied by 0.90 (air drag)
-- Vertical velocity incremented by 420 px/s² (particle gravity, always downward)
-- Colour channel multiplied by `life / max_life` for fade-to-black effect
-
----
-
-## Tech Stack
-
-| Library | Version | Role |
-|---------|---------|------|
-| [OpenCV](https://opencv.org/) | 4.13 | Camera capture, frame rendering, HUD |
-| [MediaPipe](https://mediapipe.dev/) | 0.10 | Real-time hand landmark detection |
-| [Pymunk](http://www.pymunk.org/) | 7.2 | 2D rigid-body physics (Chipmunk wrapper) |
-| [NumPy](https://numpy.org/) | 2.4 | Frame buffer manipulation, polygon drawing |
 
 ---
 
 ## Installation
 
-> **Requires Python 3.9–3.11.** MediaPipe does not yet support 3.12+.
+> Requires **Python 3.9–3.11**. MediaPipe does not support 3.12+.
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/virtual-physics-lab.git
-cd virtual-physics-lab
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+cd YOUR_REPO
 
-# Create a virtual environment (use python3.11 if 3.12+ is your default)
 python3.11 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
 pip install -r requirements.txt
 ```
 
-### macOS — camera permission
+MediaPipe model files (`.task`) are downloaded automatically on first run.
 
-System Settings → Privacy & Security → Camera → enable Terminal (or your IDE).
-
----
-
-## Usage
-
-```bash
-source .venv/bin/activate
-python virtual_physics_lab_v2.py
-```
-
-Press **Q** to quit.
-
----
-
-## Project Structure
-
-```
-virtual-physics-lab/
-├── virtual_physics_lab_v2.py   # Main application (single file)
-│   ├── CONFIG                  # Tunable constants
-│   ├── Particle system         # Lightweight spark emitter
-│   ├── Physics space           # Pymunk space + wall builder
-│   ├── Dynamic objects         # Shape spawning + culling
-│   ├── Kinematic bodies        # Finger-tip collision proxies
-│   ├── Gesture detection       # Pure-geometry classifiers
-│   └── Main loop               # Capture → detect → physics → render
-├── requirements.txt
-└── README.md
-```
-
----
-
-## Tuning Constants
-
-All physics feel is controlled by constants at the top of the file:
-
-| Constant | Default | Effect |
-|----------|---------|--------|
-| `PINCH_THRESH` | 50 px | How close thumb/index must be to trigger pinch |
-| `FLICK_THRESH` | 350 px/s | Minimum finger speed to trigger impulse kick |
-| `PALM_COOLDOWN` | 1.2 s | Minimum delay between shockwaves |
-| `SPAWN_COOLDOWN` | 0.7 s | Minimum delay between shape spawns |
-| `MAX_OBJECTS` | 45 | Hard cap on simultaneous rigid bodies |
-| `GRAVITY_NORMAL` | (0, 900) px/s² | Downward gravity strength |
-
----
-
-## What I Learned
-
-- **MediaPipe landmark coordinate system** — normalised `(x, y)` with `z` as relative depth; `y` increases downward so "finger extended" means `tip.y < pip.y`
-- **Kinematic vs dynamic bodies** — kinematic bodies must have their `velocity` set (not just `position`) for Pymunk to resolve collision impulses correctly
-- **Rising-edge gesture gating** — storing previous-frame gesture state prevents one deliberate gesture from firing dozens of times
-- **Particle system performance** — `__slots__` + in-place `list.pop()` avoids GC pressure in the hot loop
-- **Frame-rate independence** — capping `dt = min(elapsed, 0.05)` prevents physics explosions when the process is paused or the camera stalls
-
----
-
-## Potential Extensions
-
-- [ ] Record and export GIF demos automatically
-- [ ] Sound effects tied to gesture events (collisions, shockwave)
-- [ ] Save/load scene state (pickle the body positions/velocities)
-- [ ] Web version using MediaPipe JS + Matter.js
-- [ ] Colour themes switchable by gesture (e.g., two-hand pinch)
-- [ ] Gesture sequence recognition (pinch → fist → palm = special combo)
+**macOS — camera permission**  
+System Settings → Privacy & Security → Camera → enable Terminal.
 
 ---
 
 ## License
 
-MIT — do whatever you like with it.
+MIT
