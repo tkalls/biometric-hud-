@@ -1,13 +1,13 @@
-# Computer Vision Projects
+# Computer Vision Project
 
 Real-time hand and face tracking experiments built with MediaPipe, OpenCV, and Python.  
-No mouse. No keyboard. Just your hands and a webcam.
+No mouse. No keyboard. Just your hands and a webcam doing cool stuff me and my friends can take picture with.
 
 ---
 
-## Projects
+## projects
 
-### 1 · Welcome Buddy — Biometric HUD (`camera_tracking_v2.py`)
+### biometric HUD (`camera_tracking_v2.py`)
 
 A dual-person surveillance-style HUD with a cyberpunk aesthetic. Tracks two people simultaneously — face bounding boxes, live emotion detection, and a glowing hand skeleton with adaptive motion prediction.
 
